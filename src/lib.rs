@@ -22,6 +22,10 @@ mod utils {
 }
 
 pub mod storage {
+    use wasm_bindgen::closure::Closure;
+    use wasm_bindgen::JsValue;
+    use js_sys::Reflect;
+
     pub mod local {
         use wasm_bindgen::prelude::*;
         use crate::utils::{map_to_js_value, create_object_with_property};
@@ -150,6 +154,19 @@ pub mod storage {
                 callback(changes, namespace);
             }))
         }
+    }
+
+    pub fn create_get_one_closure<T>(mut callback: T, key: &str) -> Closure<dyn FnMut(JsValue)>
+        where T: FnMut(Option<JsValue>) + 'static,
+    {
+        let key: JsValue = key.into();
+
+        Closure::wrap(Box::new(move | data | {
+            let value = Reflect::get(&data, &key)
+                .ok();
+
+            callback(value);
+        }))
     }
 }
 
