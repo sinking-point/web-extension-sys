@@ -32,7 +32,6 @@ pub mod storage {
         use serde_wasm_bindgen;
         use crate::error::Error;
         use serde::Serialize;
-        use std::collections::HashMap;
 
         #[wasm_bindgen]
         extern "C" {
@@ -43,7 +42,10 @@ pub mod storage {
             fn _get_multiple(keys: Vec<JsValue>, callback: &Closure<dyn FnMut(JsValue)>);
 
             #[wasm_bindgen(js_namespace = ["chrome", "storage", "local"], js_name = set)]
-            fn _set(data: JsValue, callback: &Closure<dyn FnMut()>);
+            fn _set(data: JsValue);
+
+            #[wasm_bindgen(js_namespace = ["chrome", "storage", "local"], js_name = set)]
+            fn _set_and_then(data: JsValue, callback: &Closure<dyn FnMut()>);
         }
 
         pub fn get_multiple(keys: Vec<String>, callback: &Closure<dyn FnMut(JsValue)>) {
@@ -52,23 +54,34 @@ pub mod storage {
             _get_multiple(keys, callback)
         }
 
+        fn _set_optional_callback(data: JsValue, callback: Option<&Closure<dyn FnMut()>>) {
+            match callback {
+                None => {
+                    _set(data);
+                }
+                Some(c) => {
+                    _set_and_then(data, c);
+                }
+            }
+        }
+
         pub fn set_one<T: Into<JsValue>>(
             key: String,
             value: T,
-            callback: &Closure<dyn FnMut()>
+            callback: Option<&Closure<dyn FnMut()>>
         ) -> Result<(), Error> {
             let data = create_object_with_property(key, value)?;
 
-            _set(data.into(), callback);
+            _set_optional_callback(data.into(), callback);
 
             Ok(())
         }
 
         pub fn set_multiple<T: Serialize>(
-            data: HashMap<String, T>,
-            callback: &Closure<dyn FnMut()>
+            data: T,
+            callback: Option<&Closure<dyn FnMut()>>
         ) -> Result<(), Error> {
-            _set(serde_wasm_bindgen::to_value(&data)?, callback);
+            _set_optional_callback(serde_wasm_bindgen::to_value(&data)?, callback);
 
             Ok(())
         }
@@ -80,7 +93,6 @@ pub mod storage {
         use serde_wasm_bindgen;
         use crate::error::Error;
         use serde::Serialize;
-        use std::collections::HashMap;
 
         #[wasm_bindgen]
         extern "C" {
@@ -91,7 +103,10 @@ pub mod storage {
             fn _get_multiple(keys: Vec<JsValue>, callback: &Closure<dyn FnMut(JsValue)>);
 
             #[wasm_bindgen(js_namespace = ["chrome", "storage", "sync"], js_name = set)]
-            fn _set(data: JsValue, callback: &Closure<dyn FnMut()>);
+            fn _set(data: JsValue);
+
+            #[wasm_bindgen(js_namespace = ["chrome", "storage", "sync"], js_name = set)]
+            fn _set_and_then(data: JsValue, callback: &Closure<dyn FnMut()>);
         }
 
         pub fn get_multiple(keys: Vec<String>, callback: &Closure<dyn FnMut(JsValue)>) {
@@ -100,23 +115,34 @@ pub mod storage {
             _get_multiple(keys, callback)
         }
 
+        fn _set_optional_callback(data: JsValue, callback: Option<&Closure<dyn FnMut()>>) {
+            match callback {
+                None => {
+                    _set(data);
+                }
+                Some(c) => {
+                    _set_and_then(data, c);
+                }
+            }
+        }
+
         pub fn set_one<T: Into<JsValue>>(
             key: String,
             value: T,
-            callback: &Closure<dyn FnMut()>
+            callback: Option<&Closure<dyn FnMut()>>
         ) -> Result<(), Error> {
             let data = create_object_with_property(key, value)?;
 
-            _set(data.into(), callback);
+            _set_optional_callback(data.into(), callback);
 
             Ok(())
         }
 
         pub fn set_multiple<T: Serialize>(
-            data: HashMap<String, T>,
-            callback: &Closure<dyn FnMut()>
+            data: T,
+            callback: Option<&Closure<dyn FnMut()>>
         ) -> Result<(), Error> {
-            _set(serde_wasm_bindgen::to_value(&data)?, callback);
+            _set_optional_callback(serde_wasm_bindgen::to_value(&data)?, callback);
 
             Ok(())
         }
@@ -162,8 +188,18 @@ pub mod storage {
         let key: JsValue = key.into();
 
         Closure::wrap(Box::new(move | data | {
-            let value = Reflect::get(&data, &key)
-                .ok();
+            let value = Reflect::get(&data, &key);
+
+            let value = match value {
+                Ok(v) => {
+                    if v.is_undefined() {
+                        None
+                    } else {
+                        Some(v)
+                    }
+                },
+                Err(_) => None,
+            };
 
             callback(value);
         }))
